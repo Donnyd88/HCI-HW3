@@ -4,7 +4,8 @@ import requests
 API_URL = "http://localhost:8005"
 
 questions = []
-page_body = ui.column()
+page_body = ui.column().classes("max-w-2xl mx-auto w-full")
+
 
 def api_get(path):
     try:
@@ -20,6 +21,7 @@ def api_get(path):
         ui.notify(f"Could not reach API: {e}", type="negative")
         return []
 
+
 def api_post(path, data):
     try:
         # Attempt to send POST request to API with data payload
@@ -34,55 +36,114 @@ def api_post(path, data):
         ui.notify(f"Could not reach API: {e}", type="negative")
         return False
 
+
 # TODO: Create api_delete function that attempts to send a DELETE request to the API.
 # The request method should use the string f"{API_URL}{path}/{id}" to access the correct path,
-# where id refers to the id number of the question to be deleted. 
+# where id refers to the id number of the question to be deleted.
 def api_delete(path, id):
-    pass
+    try:
+        response = requests.delete(f"{API_URL}{path}/{id}", timeout=5)
+        response.raise_for_status()
+        return True
+    except requests.RequestException as e:
+        ui.notify(f"Could not reach API: {e}", type="negative")
+        return False
+
 
 # TODO: Create api_put function that attempts to send a PUT request to the API.
 # The request method should use the string f"{API_URL}{path}/{id}" to access the correct path,
 # where id refers to the id number of the question to be deleted. The data passed as an argument
-# to this function must be sent with the request so that the API knows the updated values to add 
+# to this function must be sent with the request so that the API knows the updated values to add
 # to the dataset (similar to how data is sent in api_post).
 def api_put(path, id, data):
-    pass
+    try:
+        response = requests.put(f"{API_URL}{path}/{id}", json=data, timeout=5)
+        response.raise_for_status()
+        return True
+    except requests.RequestException as e:
+        ui.notify(f"Could not reach API: {e}", type="negative")
+        return False
 
-# TODO: Add edit and delete buttons dynamically to each question card. 
+
 def render_question(question):
-    with ui.card() as card:
-        card.on("click", lambda: toggle_answer(question["id"]))
-        ui.label(question["q"])
-        ui.label(question["a"]).classes("text-s text-green font-bold").bind_visibility_from(question["state"], "show_answer")
+    with ui.card().classes(
+        "h-60 flex flex-col justify-between cursor-pointer  hover:shadow-lg w-full"
+    ) as card:
+        card.on("click", lambda: toggle_answer(questions.index(question)))
+        with ui.column().classes("w-full items-center text-center"):
+            ui.label(question["q"])
+            ui.label(question["a"]).classes(
+                "text-s text-green font-bold"
+            ).bind_visibility_from(question["state"], "show_answer")
+
+        with ui.dialog() as dialog, ui.card():
+            ui.label("Edit Question & Answer")
+            new_q = ui.textarea(label="Question", value=question["q"])
+            new_a = ui.textarea(label="Answer", value=question["a"])
+            ui.button(
+                "Update question",
+                on_click=lambda: [
+                    dialog.close(),
+                    api_put(
+                        "/update",
+                        question["id"],
+                        {"question": new_q.value, "answer": new_a.value},
+                    ),
+                    render_page(),
+                ],
+            )
+
+        with ui.row().classes("w-full justify-center gap-2"):
+            ui.button(
+                text="Delete Question",
+                on_click=lambda: [
+                    api_delete("/delete", question["id"]),
+                    render_page(),
+                ],
+            ).props("color=red")
+            ui.button("Edit Question", on_click=lambda: dialog.open())
+
 
 def toggle_answer(i):
     questions[i]["state"]["show_answer"] = not questions[i]["state"]["show_answer"]
+
 
 def add_new_question(question, answer):
     api_post("/add", {"question": question, "answer": answer})
     render_page()
 
+
 def render_text_inputs():
-    new_question_input = ui.input(label="New question").props("clearable")
-    new_answer_input = ui.input(label="New answer").props("clearable")
-    add_question_btn = ui.button(text="Add question", on_click=lambda: add_new_question(
-        question=new_question_input.value,
-        answer=new_answer_input.value
-    ))
+    with ui.card().classes(
+        "w-full border bg-slate-50 border-slate-200 p-4 flex flex-col items-center gap-2"
+    ):
+        ui.label("Add New Question").classes("text-lg font-bold")
+        new_question_input = ui.input(label="New question").props("clearable")
+        new_answer_input = ui.input(label="New answer").props("clearable")
+        ui.button(
+            text="Add question",
+            on_click=lambda: add_new_question(
+                question=new_question_input.value, answer=new_answer_input.value
+            ),
+        )
+
 
 def init_page():
     render_page()
+
 
 def render_page():
     global questions
     questions = api_get("/questions")
     page_body.clear()
     with page_body:
-        for question in questions:
-            question["state"] = {"show_answer": False}
-            render_question(question)
-        render_text_inputs()
-    
+        with ui.row().classes("w-full items-center justify-center"):
+            ui.label("Questions & Answers").classes("text-2xl justify-center font-bold")
+            for question in questions:
+                question["state"] = {"show_answer": False}
+                render_question(question)
+            render_text_inputs()
+
 
 init_page()
 ui.run(port=8084, title="HCI Review Application")
